@@ -5,6 +5,8 @@ using System.Configuration;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
+using System.Drawing.Printing;
+
 
 namespace FitnessClubManager
 {
@@ -25,6 +27,7 @@ namespace FitnessClubManager
                     if (parameters != null)
                         foreach (var param in parameters)
                             cmd.Parameters.AddWithValue(param.Key, param.Value ?? DBNull.Value);
+
                     return cmd.ExecuteNonQuery();
                 }
             }
@@ -41,6 +44,7 @@ namespace FitnessClubManager
                     if (parameters != null)
                         foreach (var param in parameters)
                             cmd.Parameters.AddWithValue(param.Key, param.Value ?? DBNull.Value);
+
                     return cmd.ExecuteScalar();
                 }
             }
@@ -58,11 +62,43 @@ namespace FitnessClubManager
                     if (parameters != null)
                         foreach (var param in parameters)
                             cmd.Parameters.AddWithValue(param.Key, param.Value ?? DBNull.Value);
+
                     using (var adapter = new NpgsqlDataAdapter(cmd))
+                    {
                         adapter.Fill(dt);
+                    }
                 }
             }
             return dt;
+        }
+
+        // Добавление параметров к команде
+        private static void AddParametersToCommand(NpgsqlCommand cmd, Dictionary<string, object> parameters)
+        {
+            if (parameters == null) return;
+
+            foreach (var param in parameters)
+                cmd.Parameters.AddWithValue(param.Key, param.Value ?? DBNull.Value);
+        }
+
+        // Универсальный метод для выполнения запроса с возвратом объекта
+        private static T ExecuteReaderSingle<T>(string sql, Dictionary<string, object> parameters, Func<NpgsqlDataReader, T> mapFunc)
+        {
+            using (var conn = new NpgsqlConnection(ConnString))
+            {
+                conn.Open();
+                using (var cmd = new NpgsqlCommand(sql, conn))
+                {
+                    AddParametersToCommand(cmd, parameters);
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                            return mapFunc(reader);
+                    }
+                }
+            }
+            return default(T);
         }
         #endregion
 
@@ -89,8 +125,8 @@ namespace FitnessClubManager
                         {
                             userId = reader.GetInt32(0);
                             int roleId = reader.GetInt32(1);
-
                             reader.Close();
+
                             cmd.CommandText = "SELECT RoleName FROM Roles WHERE RoleID = @roleId";
                             cmd.Parameters.Clear();
                             cmd.Parameters.AddWithValue("@roleId", roleId);
@@ -104,39 +140,29 @@ namespace FitnessClubManager
                     }
                 }
             }
+
             return new Tuple<int, string>(userId, roleName);
         }
 
         // Получение имени пользователя
         public static string GetUserName(int userId)
         {
-            string name = "Пользователь";
-            using (var conn = new NpgsqlConnection(ConnString))
+            // Функция для чтения имени из любой таблицы
+            string GetPersonName(string tableName)
             {
-                conn.Open();
-                using (var cmd = new NpgsqlCommand())
-                {
-                    cmd.Connection = conn;
-
-                    // Сначала ищем в клиентах
-                    cmd.CommandText = "SELECT LastName, FirstName FROM Clients WHERE UserID = @userId";
-                    cmd.Parameters.AddWithValue("@userId", userId);
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                            return reader.GetString(0) + " " + reader.GetString(1);
-                    }
-
-                    // Затем ищем в тренерах
-                    cmd.CommandText = "SELECT LastName, FirstName FROM Trainers WHERE UserID = @userId";
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                            return reader.GetString(0) + " " + reader.GetString(1);
-                    }
-                }
+                return ExecuteReaderSingle<string>(
+                    $"SELECT LastName, FirstName FROM {tableName} WHERE UserID = @userId",
+                    new Dictionary<string, object> { { "@userId", userId } },
+                    r => $"{r.GetString(0)} {r.GetString(1)}"
+                );
             }
-            return name;
+
+            // Сначала ищем в клиентах, затем в тренерах
+            string name = GetPersonName("Clients");
+            if (string.IsNullOrEmpty(name))
+                name = GetPersonName("Trainers");
+
+            return string.IsNullOrEmpty(name) ? "Пользователь" : name;
         }
         #endregion
 
@@ -144,56 +170,37 @@ namespace FitnessClubManager
         // Получить список всех клиентов
         public static DataTable GetClients()
         {
-            string sql = "SELECT * FROM Clients ORDER BY LastName";
-            return ExecuteDataTable(sql);
+            return ExecuteDataTable("SELECT * FROM Clients ORDER BY LastName");
         }
 
         // Получить список клиентов по уровню активности
         public static DataTable GetClientsByActivityLevel(string activityLevel)
         {
-            string sql = "SELECT * FROM Clients WHERE ActivityLevel = @activityLevel ORDER BY LastName";
-            var parameters = new Dictionary<string, object> { { "@activityLevel", activityLevel } };
-            return ExecuteDataTable(sql, parameters);
+            return ExecuteDataTable("SELECT * FROM Clients WHERE ActivityLevel = @activityLevel ORDER BY LastName",
+                new Dictionary<string, object> { { "@activityLevel", activityLevel } });
         }
 
         // Получить данные одного клиента
         public static Client GetClient(int clientId)
         {
-            Client client = null;
-            string sql = "SELECT * FROM Clients WHERE ClientID = @clientId";
-            var parameters = new Dictionary<string, object> { { "@clientId", clientId } };
-
-            using (var conn = new NpgsqlConnection(ConnString))
-            {
-                conn.Open();
-                using (var cmd = new NpgsqlCommand(sql, conn))
+            return ExecuteReaderSingle<Client>(
+                "SELECT * FROM Clients WHERE ClientID = @clientId",
+                new Dictionary<string, object> { { "@clientId", clientId } },
+                r => new Client
                 {
-                    foreach (var param in parameters)
-                        cmd.Parameters.AddWithValue(param.Key, param.Value);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            client = new Client
-                            {
-                                ClientID = reader.GetInt32(0),
-                                UserID = reader.GetInt32(1),
-                                LastName = reader.GetString(2),
-                                FirstName = reader.GetString(3),
-                                MiddleName = !reader.IsDBNull(4) ? reader.GetString(4) : null,
-                                BirthDate = !reader.IsDBNull(5) ? reader.GetDateTime(5) : (DateTime?)null,
-                                Phone = reader.GetString(6),
-                                Email = !reader.IsDBNull(7) ? reader.GetString(7) : null,
-                                RegistrationDate = reader.GetDateTime(8),
-                                Notes = !reader.IsDBNull(9) ? reader.GetString(9) : null,
-                                ActivityLevel = !reader.IsDBNull(10) ? reader.GetString(10) : "Средний"
-                            };
-                        }
-                    }
+                    ClientID = r.GetInt32(0),
+                    UserID = r.GetInt32(1),
+                    LastName = r.GetString(2),
+                    FirstName = r.GetString(3),
+                    MiddleName = !r.IsDBNull(4) ? r.GetString(4) : null,
+                    BirthDate = !r.IsDBNull(5) ? r.GetDateTime(5) : (DateTime?)null,
+                    Phone = r.GetString(6),
+                    Email = !r.IsDBNull(7) ? r.GetString(7) : null,
+                    RegistrationDate = r.GetDateTime(8),
+                    Notes = !r.IsDBNull(9) ? r.GetString(9) : null,
+                    ActivityLevel = !r.IsDBNull(10) ? r.GetString(10) : "Средний"
                 }
-            }
-            return client;
+            );
         }
 
         // Добавить нового клиента
@@ -240,6 +247,7 @@ namespace FitnessClubManager
                         LogClientChange(clientId, "Создание записи клиента");
                 }
             }
+
             return clientId;
         }
 
@@ -290,21 +298,23 @@ namespace FitnessClubManager
 
                 ExecuteNonQuery(sql, parameters);
             }
-            catch (Exception) { } // Логируем ошибку в лог-файл
+            catch (Exception ex)
+            {
+                // Логируем ошибку
+                System.Diagnostics.Debug.WriteLine($"Ошибка при логировании: {ex.Message}");
+            }
         }
 
         // Получить историю изменений клиента
         public static DataTable GetClientHistory(int clientId)
         {
-            string sql = @"SELECT ch.ChangeDate, ch.ChangeDescription, 
-                          COALESCE(u.Login, 'Система') as UserName
-                          FROM ClientHistory ch
-                          LEFT JOIN Users u ON ch.UserID = u.UserID
-                          WHERE ch.ClientID = @clientId
-                          ORDER BY ch.ChangeDate DESC";
-
-            var parameters = new Dictionary<string, object> { { "@clientId", clientId } };
-            return ExecuteDataTable(sql, parameters);
+            return ExecuteDataTable(@"SELECT ch.ChangeDate, ch.ChangeDescription, 
+                                     COALESCE(u.Login, 'Система') as UserName
+                                     FROM ClientHistory ch
+                                     LEFT JOIN Users u ON ch.UserID = u.UserID
+                                     WHERE ch.ClientID = @clientId
+                                     ORDER BY ch.ChangeDate DESC",
+                                     new Dictionary<string, object> { { "@clientId", clientId } });
         }
         #endregion
 
@@ -312,134 +322,102 @@ namespace FitnessClubManager
         // Получить список абонементов
         public static DataTable GetMemberships(bool activeOnly)
         {
-            string sql = @"SELECT m.MembershipID, m.ClientID, c.LastName || ' ' || c.FirstName AS ClientName, 
-                         m.TypeID, mt.TypeName, m.StartDate, m.EndDate, m.IssueDate, m.IsActive, m.AutoRenew 
-                         FROM Memberships m 
-                         JOIN Clients c ON m.ClientID = c.ClientID 
-                         JOIN MembershipTypes mt ON m.TypeID = mt.TypeID 
-                         WHERE m.IsActive = @activeOnly 
-                         ORDER BY m.EndDate";
-
-            var parameters = new Dictionary<string, object> { { "@activeOnly", activeOnly } };
-            return ExecuteDataTable(sql, parameters);
+            return ExecuteDataTable(@"SELECT m.MembershipID, m.ClientID, c.LastName || ' ' || c.FirstName AS ClientName, 
+                                   m.TypeID, mt.TypeName, m.StartDate, m.EndDate, m.IssueDate, m.IsActive, m.AutoRenew 
+                                   FROM Memberships m 
+                                   JOIN Clients c ON m.ClientID = c.ClientID 
+                                   JOIN MembershipTypes mt ON m.TypeID = mt.TypeID 
+                                   WHERE m.IsActive = @activeOnly 
+                                   ORDER BY m.EndDate",
+                                   new Dictionary<string, object> { { "@activeOnly", activeOnly } });
         }
 
         // Получить абонементы для конкретного клиента
         public static DataTable GetClientMemberships(int clientId)
         {
-            string sql = @"SELECT m.MembershipID, m.TypeID, mt.TypeName, m.StartDate, m.EndDate, 
-                         m.IssueDate, m.IsActive, mt.Price, m.AutoRenew 
-                         FROM Memberships m 
-                         JOIN MembershipTypes mt ON m.TypeID = mt.TypeID 
-                         WHERE m.ClientID = @clientId 
-                         ORDER BY m.IssueDate DESC";
-
-            var parameters = new Dictionary<string, object> { { "@clientId", clientId } };
-            return ExecuteDataTable(sql, parameters);
+            return ExecuteDataTable(@"SELECT m.MembershipID, m.TypeID, mt.TypeName, m.StartDate, m.EndDate, 
+                                   m.IssueDate, m.IsActive, mt.Price, m.AutoRenew 
+                                   FROM Memberships m 
+                                   JOIN MembershipTypes mt ON m.TypeID = mt.TypeID 
+                                   WHERE m.ClientID = @clientId 
+                                   ORDER BY m.IssueDate DESC",
+                                   new Dictionary<string, object> { { "@clientId", clientId } });
         }
 
         // Получить типы абонементов
         public static DataTable GetMembershipTypes()
         {
-            string sql = "SELECT * FROM MembershipTypes ORDER BY Price";
-            return ExecuteDataTable(sql);
+            return ExecuteDataTable("SELECT * FROM MembershipTypes ORDER BY Price");
         }
 
         // Добавить новый абонемент
         public static int AddMembership(int clientId, int typeId, DateTime startDate, bool autoRenew = false)
         {
-            string sql = @"INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive, AutoRenew) 
-                         VALUES (@clientId, @typeId, @startDate, 
-                         @startDate + ((SELECT DurationDays FROM MembershipTypes WHERE TypeID = @typeId) || ' days')::interval, 
-                         CURRENT_DATE, true, @autoRenew) 
-                         RETURNING MembershipID";
-
-            var parameters = new Dictionary<string, object> {
-                { "@clientId", clientId },
-                { "@typeId", typeId },
-                { "@startDate", startDate },
-                { "@autoRenew", autoRenew }
-            };
-
-            return Convert.ToInt32(ExecuteScalar(sql, parameters));
+            return Convert.ToInt32(ExecuteScalar(@"INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive, AutoRenew) 
+                                               VALUES (@clientId, @typeId, @startDate, 
+                                               @startDate + ((SELECT DurationDays FROM MembershipTypes WHERE TypeID = @typeId) || ' days')::interval, 
+                                               CURRENT_DATE, true, @autoRenew) 
+                                               RETURNING MembershipID",
+                                               new Dictionary<string, object> {
+                                                   { "@clientId", clientId },
+                                                   { "@typeId", typeId },
+                                                   { "@startDate", startDate },
+                                                   { "@autoRenew", autoRenew }
+                                               }));
         }
 
         // Получить данные абонемента
         public static Membership GetMembership(int membershipId)
         {
-            Membership membership = null;
-            string sql = @"SELECT m.*, mt.DurationDays, mt.TypeName 
-                         FROM Memberships m 
-                         JOIN MembershipTypes mt ON m.TypeID = mt.TypeID 
-                         WHERE m.MembershipID = @membershipId";
-
-            var parameters = new Dictionary<string, object> { { "@membershipId", membershipId } };
-
-            using (var conn = new NpgsqlConnection(ConnString))
-            {
-                conn.Open();
-                using (var cmd = new NpgsqlCommand(sql, conn))
+            return ExecuteReaderSingle<Membership>(
+                @"SELECT m.*, mt.DurationDays, mt.TypeName 
+                 FROM Memberships m 
+                 JOIN MembershipTypes mt ON m.TypeID = mt.TypeID 
+                 WHERE m.MembershipID = @membershipId",
+                new Dictionary<string, object> { { "@membershipId", membershipId } },
+                r => new Membership
                 {
-                    foreach (var param in parameters)
-                        cmd.Parameters.AddWithValue(param.Key, param.Value);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            membership = new Membership
-                            {
-                                MembershipID = reader.GetInt32(0),
-                                ClientID = reader.GetInt32(1),
-                                TypeID = reader.GetInt32(2),
-                                StartDate = reader.GetDateTime(3),
-                                EndDate = reader.GetDateTime(4),
-                                IssueDate = reader.GetDateTime(5),
-                                IsActive = reader.GetBoolean(6),
-                                AutoRenew = !reader.IsDBNull(7) && reader.GetBoolean(7),
-                                DurationDays = reader.GetInt32(8),
-                                TypeName = reader.GetString(9)
-                            };
-                        }
-                    }
+                    MembershipID = r.GetInt32(0),
+                    ClientID = r.GetInt32(1),
+                    TypeID = r.GetInt32(2),
+                    StartDate = r.GetDateTime(3),
+                    EndDate = r.GetDateTime(4),
+                    IssueDate = r.GetDateTime(5),
+                    IsActive = r.GetBoolean(6),
+                    AutoRenew = !r.IsDBNull(7) && r.GetBoolean(7),
+                    DurationDays = r.GetInt32(8),
+                    TypeName = r.GetString(9)
                 }
-            }
-            return membership;
+            );
         }
 
         // Продлить абонемент
         public static bool ExtendMembership(int membershipId, int extendDays)
         {
-            string sql = @"UPDATE Memberships 
-                         SET EndDate = EndDate + (@extendDays || ' days')::interval, 
-                         IsActive = true 
-                         WHERE MembershipID = @membershipId";
-
-            var parameters = new Dictionary<string, object> {
-                { "@membershipId", membershipId },
-                { "@extendDays", extendDays }
-            };
-
-            return ExecuteNonQuery(sql, parameters) > 0;
+            return ExecuteNonQuery(@"UPDATE Memberships 
+                                  SET EndDate = EndDate + (@extendDays || ' days')::interval, 
+                                  IsActive = true 
+                                  WHERE MembershipID = @membershipId",
+                                  new Dictionary<string, object> {
+                                      { "@membershipId", membershipId },
+                                      { "@extendDays", extendDays }
+                                  }) > 0;
         }
 
         // Обновить настройку автопродления
         public static bool UpdateMembershipAutoRenew(int membershipId, bool autoRenew)
         {
-            string sql = "UPDATE Memberships SET AutoRenew = @autoRenew WHERE MembershipID = @membershipId";
-
-            var parameters = new Dictionary<string, object> {
-                { "@membershipId", membershipId },
-                { "@autoRenew", autoRenew }
-            };
-
-            return ExecuteNonQuery(sql, parameters) > 0;
+            return ExecuteNonQuery("UPDATE Memberships SET AutoRenew = @autoRenew WHERE MembershipID = @membershipId",
+                                 new Dictionary<string, object> {
+                                     { "@membershipId", membershipId },
+                                     { "@autoRenew", autoRenew }
+                                 }) > 0;
         }
 
         // Получить абонементы для автопродления
         public static List<Membership> GetMembershipsForAutoRenewal()
         {
-            List<Membership> memberships = new List<Membership>();
+            var memberships = new List<Membership>();
             string sql = @"SELECT m.MembershipID, m.ClientID, m.TypeID, m.StartDate, m.EndDate, 
                          m.IssueDate, m.IsActive, mt.DurationDays, mt.TypeName 
                          FROM Memberships m 
@@ -473,6 +451,7 @@ namespace FitnessClubManager
                     }
                 }
             }
+
             return memberships;
         }
         #endregion
@@ -481,17 +460,15 @@ namespace FitnessClubManager
         // Получить расписание на определенную дату
         public static DataTable GetSchedule(DateTime date)
         {
-            string sql = @"SELECT s.ScheduleID, s.ClassID, c.ClassName, s.StartTime, 
-                         c.Duration, s.TrainerID, t.LastName || ' ' || t.FirstName AS TrainerName, 
-                         s.MaxParticipants 
-                         FROM Schedule s 
-                         JOIN Classes c ON s.ClassID = c.ClassID 
-                         JOIN Trainers t ON s.TrainerID = t.TrainerID 
-                         WHERE s.ClassDate = @date 
-                         ORDER BY s.StartTime";
-
-            var parameters = new Dictionary<string, object> { { "@date", date.Date } };
-            return ExecuteDataTable(sql, parameters);
+            return ExecuteDataTable(@"SELECT s.ScheduleID, s.ClassID, c.ClassName, s.StartTime, 
+                                   c.Duration, s.TrainerID, t.LastName || ' ' || t.FirstName AS TrainerName, 
+                                   s.MaxParticipants 
+                                   FROM Schedule s 
+                                   JOIN Classes c ON s.ClassID = c.ClassID 
+                                   JOIN Trainers t ON s.TrainerID = t.TrainerID 
+                                   WHERE s.ClassDate = @date 
+                                   ORDER BY s.StartTime",
+                                   new Dictionary<string, object> { { "@date", date.Date } });
         }
 
         // Получить расписание тренера
@@ -527,48 +504,29 @@ namespace FitnessClubManager
         // Получить данные занятия из расписания
         public static ScheduleEntry GetScheduleEntry(int scheduleId)
         {
-            ScheduleEntry entry = null;
-            string sql = "SELECT * FROM Schedule WHERE ScheduleID = @scheduleId";
-            var parameters = new Dictionary<string, object> { { "@scheduleId", scheduleId } };
-
-            using (var conn = new NpgsqlConnection(ConnString))
-            {
-                conn.Open();
-                using (var cmd = new NpgsqlCommand(sql, conn))
+            return ExecuteReaderSingle<ScheduleEntry>(
+                "SELECT * FROM Schedule WHERE ScheduleID = @scheduleId",
+                new Dictionary<string, object> { { "@scheduleId", scheduleId } },
+                r => new ScheduleEntry
                 {
-                    foreach (var param in parameters)
-                        cmd.Parameters.AddWithValue(param.Key, param.Value);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            entry = new ScheduleEntry
-                            {
-                                ScheduleID = reader.GetInt32(0),
-                                ClassID = reader.GetInt32(1),
-                                TrainerID = reader.GetInt32(2),
-                                ClassDate = reader.GetDateTime(3),
-                                StartTime = reader.GetTimeSpan(4),
-                                MaxParticipants = reader.GetInt32(5)
-                            };
-                        }
-                    }
+                    ScheduleID = r.GetInt32(0),
+                    ClassID = r.GetInt32(1),
+                    TrainerID = r.GetInt32(2),
+                    ClassDate = r.GetDateTime(3),
+                    StartTime = r.GetTimeSpan(4),
+                    MaxParticipants = r.GetInt32(5)
                 }
-            }
-            return entry;
+            );
         }
 
         // Получить список занятий
         public static DataTable GetClasses()
         {
-            string sql = @"SELECT c.ClassID, c.ClassName, c.Description, c.Duration, 
-                         ct.ClassTypeID, ct.TypeName AS ClassTypeName 
-                         FROM Classes c 
-                         JOIN ClassTypes ct ON c.ClassTypeID = ct.ClassTypeID 
-                         ORDER BY c.ClassName";
-
-            return ExecuteDataTable(sql);
+            return ExecuteDataTable(@"SELECT c.ClassID, c.ClassName, c.Description, c.Duration, 
+                                   ct.ClassTypeID, ct.TypeName AS ClassTypeName 
+                                   FROM Classes c 
+                                   JOIN ClassTypes ct ON c.ClassTypeID = ct.ClassTypeID 
+                                   ORDER BY c.ClassName");
         }
         #endregion
 
@@ -576,61 +534,42 @@ namespace FitnessClubManager
         // Получить список тренеров
         public static DataTable GetTrainers()
         {
-            string sql = @"SELECT t.*, get_trainer_average_rating(t.TrainerID) as Rating
-                         FROM Trainers t ORDER BY t.LastName";
-
-            return ExecuteDataTable(sql);
+            return ExecuteDataTable(@"SELECT t.*, get_trainer_average_rating(t.TrainerID) as Rating
+                                   FROM Trainers t ORDER BY t.LastName");
         }
 
         // Получить данные тренера
         public static Trainer GetTrainer(int trainerId)
         {
-            Trainer trainer = null;
-            string sql = "SELECT * FROM Trainers WHERE TrainerID = @trainerId";
-            var parameters = new Dictionary<string, object> { { "@trainerId", trainerId } };
-
-            using (var conn = new NpgsqlConnection(ConnString))
-            {
-                conn.Open();
-                using (var cmd = new NpgsqlCommand(sql, conn))
+            Trainer trainer = ExecuteReaderSingle<Trainer>(
+                "SELECT * FROM Trainers WHERE TrainerID = @trainerId",
+                new Dictionary<string, object> { { "@trainerId", trainerId } },
+                r => new Trainer
                 {
-                    foreach (var param in parameters)
-                        cmd.Parameters.AddWithValue(param.Key, param.Value);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            trainer = new Trainer
-                            {
-                                TrainerID = reader.GetInt32(0),
-                                UserID = reader.GetInt32(1),
-                                LastName = reader.GetString(2),
-                                FirstName = reader.GetString(3),
-                                MiddleName = !reader.IsDBNull(4) ? reader.GetString(4) : null,
-                                Specialization = !reader.IsDBNull(5) ? reader.GetString(5) : null,
-                                Experience = !reader.IsDBNull(6) ? reader.GetInt32(6) : (int?)null,
-                                Phone = reader.GetString(7),
-                                Email = !reader.IsDBNull(8) ? reader.GetString(8) : null
-                            };
-                        }
-                    }
+                    TrainerID = r.GetInt32(0),
+                    UserID = r.GetInt32(1),
+                    LastName = r.GetString(2),
+                    FirstName = r.GetString(3),
+                    MiddleName = !r.IsDBNull(4) ? r.GetString(4) : null,
+                    Specialization = !r.IsDBNull(5) ? r.GetString(5) : null,
+                    Experience = !r.IsDBNull(6) ? r.GetInt32(6) : (int?)null,
+                    Phone = r.GetString(7),
+                    Email = !r.IsDBNull(8) ? r.GetString(8) : null
                 }
+            );
 
-                // Получаем рейтинг тренера
-                if (trainer != null)
-                    trainer.Rating = GetTrainerRating(trainerId);
-            }
+            // Получаем рейтинг тренера
+            if (trainer != null)
+                trainer.Rating = GetTrainerRating(trainerId);
+
             return trainer;
         }
 
         // Получить средний рейтинг тренера
         public static double GetTrainerRating(int trainerId)
         {
-            string sql = "SELECT get_trainer_average_rating(@trainerId) as Rating";
-            var parameters = new Dictionary<string, object> { { "@trainerId", trainerId } };
-
-            object result = ExecuteScalar(sql, parameters);
+            object result = ExecuteScalar("SELECT get_trainer_average_rating(@trainerId) as Rating",
+                                         new Dictionary<string, object> { { "@trainerId", trainerId } });
             return Convert.ToDouble(result);
         }
 
@@ -640,37 +579,73 @@ namespace FitnessClubManager
             // Получаем текущего пользователя (в идеале должен быть передан из формы)
             int userId = 1; // По умолчанию используем admin
 
-            string sql = @"INSERT INTO TrainerRatings (TrainerID, Rating, Category, Comment, UserID, RatingDate)
-                         VALUES (@trainerId, @rating, @category, @comment, @userId, CURRENT_TIMESTAMP)";
-
-            var parameters = new Dictionary<string, object> {
-                { "@trainerId", trainerId },
-                { "@rating", rating },
-                { "@category", category },
-                { "@comment", string.IsNullOrEmpty(comment) ? DBNull.Value : (object)comment },
-                { "@userId", userId }
-            };
-
-            return ExecuteNonQuery(sql, parameters) > 0;
+            return ExecuteNonQuery(@"INSERT INTO TrainerRatings (TrainerID, Rating, Category, Comment, UserID, RatingDate)
+                                   VALUES (@trainerId, @rating, @category, @comment, @userId, CURRENT_TIMESTAMP)",
+                                   new Dictionary<string, object> {
+                                       { "@trainerId", trainerId },
+                                       { "@rating", rating },
+                                       { "@category", category },
+                                       { "@comment", string.IsNullOrEmpty(comment) ? DBNull.Value : (object)comment },
+                                       { "@userId", userId }
+                                   }) > 0;
         }
 
         // Получить все оценки тренера
         public static DataTable GetTrainerRatings(int trainerId)
         {
-            string sql = @"SELECT r.RatingID, r.Rating, r.Category, r.Comment, r.RatingDate,
-                         COALESCE(c.LastName || ' ' || c.FirstName, 'Аноним') as UserName
-                         FROM TrainerRatings r
-                         LEFT JOIN Users u ON r.UserID = u.UserID
-                         LEFT JOIN Clients c ON u.UserID = c.UserID
-                         WHERE r.TrainerID = @trainerId
-                         ORDER BY r.RatingDate DESC";
-
-            var parameters = new Dictionary<string, object> { { "@trainerId", trainerId } };
-            return ExecuteDataTable(sql, parameters);
+            return ExecuteDataTable(@"SELECT r.RatingID, r.Rating, r.Category, r.Comment, r.RatingDate,
+                                   COALESCE(c.LastName || ' ' || c.FirstName, 'Аноним') as UserName
+                                   FROM TrainerRatings r
+                                   LEFT JOIN Users u ON r.UserID = u.UserID
+                                   LEFT JOIN Clients c ON u.UserID = c.UserID
+                                   WHERE r.TrainerID = @trainerId
+                                   ORDER BY r.RatingDate DESC",
+                                   new Dictionary<string, object> { { "@trainerId", trainerId } });
         }
         #endregion
 
         #region Отчеты
+        // Универсальный метод для формирования отчета
+        private static string GenerateReport(string title, string sqlQuery, Dictionary<string, object> parameters = null)
+        {
+            var report = new System.Text.StringBuilder();
+            report.AppendLine(title);
+            report.AppendLine();
+
+            using (var conn = new NpgsqlConnection(ConnString))
+            {
+                conn.Open();
+                using (var cmd = new NpgsqlCommand(sqlQuery, conn))
+                {
+                    if (parameters != null)
+                        foreach (var param in parameters)
+                            cmd.Parameters.AddWithValue(param.Key, param.Value);
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        int rowCount = 0;
+
+                        while (reader.Read())
+                        {
+                            rowCount++;
+                            for (int i = 0; i < reader.FieldCount; i++)
+                            {
+                                string fieldName = reader.GetName(i);
+                                string value = reader.IsDBNull(i) ? "Не указано" : reader[i].ToString();
+                                report.AppendLine($"{fieldName}: {value}");
+                            }
+                            report.AppendLine();
+                        }
+
+                        if (rowCount == 0)
+                            report.AppendLine("Данных по запросу не найдено.");
+                    }
+                }
+            }
+
+            return report.ToString();
+        }
+
         // Отчет по посещаемости
         public static string GetAttendanceReport(DateTime startDate, DateTime endDate)
         {
@@ -693,7 +668,7 @@ namespace FitnessClubManager
                     report += $"Общее количество посещений: {Convert.ToInt32(cmd.ExecuteScalar())}\r\n\r\n";
 
                     // Посещения по дням недели
-                    cmd.CommandText = @"SELECT to_char(s.ClassDate, 'Day'), COUNT(*) 
+                    cmd.CommandText = @"SELECT to_char(s.ClassDate, 'Day') as День, COUNT(*) as Количество
                                       FROM Visits v 
                                       JOIN Schedule s ON v.ScheduleID = s.ScheduleID 
                                       WHERE s.ClassDate BETWEEN @startDate AND @endDate 
@@ -703,11 +678,19 @@ namespace FitnessClubManager
                     using (var reader = cmd.ExecuteReader())
                     {
                         report += "Посещения по дням недели:\r\n";
+                        bool hasData = false;
                         while (reader.Read())
+                        {
+                            hasData = true;
                             report += $"{reader.GetString(0).Trim()}: {reader.GetInt32(1)}\r\n";
+                        }
+
+                        if (!hasData)
+                            report += "Нет данных за указанный период\r\n";
                     }
                 }
             }
+
             return report;
         }
 
@@ -724,14 +707,13 @@ namespace FitnessClubManager
                     cmd.Connection = conn;
 
                     // Общая сумма
-                    cmd.CommandText = @"SELECT SUM(mt.Price) FROM Memberships m 
+                    cmd.CommandText = @"SELECT COALESCE(SUM(mt.Price), 0) FROM Memberships m 
                                       JOIN MembershipTypes mt ON m.TypeID = mt.TypeID 
                                       WHERE m.IssueDate BETWEEN @startDate AND @endDate";
                     cmd.Parameters.AddWithValue("@startDate", startDate);
                     cmd.Parameters.AddWithValue("@endDate", endDate);
 
-                    object sum = cmd.ExecuteScalar();
-                    decimal totalSum = sum != DBNull.Value ? Convert.ToDecimal(sum) : 0;
+                    decimal totalSum = Convert.ToDecimal(cmd.ExecuteScalar());
                     report += $"Общая сумма доходов: {totalSum:C}\r\n\r\n";
 
                     // По типам абонементов
@@ -744,18 +726,25 @@ namespace FitnessClubManager
                     using (var reader = cmd.ExecuteReader())
                     {
                         report += "Доходы по типам абонементов:\r\n";
+                        bool hasData = false;
                         while (reader.Read())
+                        {
+                            hasData = true;
                             report += $"{reader.GetString(0)}: продано {reader.GetInt32(1)} шт. на сумму {reader.GetDecimal(2):C}\r\n";
+                        }
+
+                        if (!hasData)
+                            report += "Нет данных за указанный период\r\n";
                     }
                 }
             }
+
             return report;
         }
 
         // Отчет по истекшим абонементам
         public static string GetExpiredMembershipsReport(int monthsPeriod)
         {
-            string report = "Отчет по клиентам с истекшими абонементами\r\n\r\n";
             string sql = @"SELECT c.LastName, c.FirstName, c.Phone, c.Email, 
                          mt.TypeName, m.EndDate 
                          FROM Memberships m 
@@ -765,6 +754,10 @@ namespace FitnessClubManager
                          ORDER BY m.EndDate DESC";
 
             sql = sql.Replace("@monthsPeriod", monthsPeriod.ToString());
+
+            string title = $"Отчет по клиентам с истекшими абонементами за последние {monthsPeriod} месяцев\r\n";
+            var report = new System.Text.StringBuilder(title);
+            report.AppendLine();
 
             using (var conn = new NpgsqlConnection(ConnString))
             {
@@ -777,18 +770,20 @@ namespace FitnessClubManager
                         while (reader.Read())
                         {
                             counter++;
-                            report += $"{counter}. {reader.GetString(0)} {reader.GetString(1)}\r\n";
-                            report += $"   Телефон: {reader.GetString(2)}, Email: {(!reader.IsDBNull(3) ? reader.GetString(3) : "Не указан")}\r\n";
-                            report += $"   Абонемент: {reader.GetString(4)}\r\n";
-                            report += $"   Дата окончания: {reader.GetDateTime(5).ToShortDateString()}\r\n\r\n";
+                            report.AppendLine($"{counter}. {reader.GetString(0)} {reader.GetString(1)}");
+                            report.AppendLine($"   Телефон: {reader.GetString(2)}, Email: {(!reader.IsDBNull(3) ? reader.GetString(3) : "Не указан")}");
+                            report.AppendLine($"   Абонемент: {reader.GetString(4)}");
+                            report.AppendLine($"   Дата окончания: {reader.GetDateTime(5).ToShortDateString()}");
+                            report.AppendLine();
                         }
 
                         if (counter == 0)
-                            report += "Клиентов с истекшими абонементами за указанный период не найдено.";
+                            report.AppendLine("Клиентов с истекшими абонементами за указанный период не найдено.");
                     }
                 }
             }
-            return report;
+
+            return report.ToString();
         }
 
         // Экспорт отчета в файл
@@ -799,25 +794,170 @@ namespace FitnessClubManager
                 File.WriteAllText(filePath, reportText);
                 return true;
             }
-            catch (Exception) { return false; }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при сохранении файла: {ex.Message}",
+                               "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        // Метод-диспетчер для экспорта отчета
+        public static bool ExportReport(string reportText, string filePath, string format)
+        {
+            try
+            {
+                switch (format.ToLower())
+                {
+                    case "txt":
+                        return ExportReportToFile(reportText, filePath);
+                    case "pdf":
+                        return ExportReportToPDF(reportText, filePath);
+                    case "excel":
+                    case "xlsx":
+                        return ExportReportToExcel(reportText, filePath);
+                    default:
+                        MessageBox.Show($"Неизвестный формат отчета: {format}",
+                                       "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при экспорте отчета: {ex.Message}",
+                               "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
         }
 
         // Экспорт отчета в PDF
         public static bool ExportReportToPDF(string reportText, string filePath)
         {
-            // Примечание: для реализации этого метода нужна библиотека iTextSharp
-            MessageBox.Show("Экспорт в PDF требует библиотеки iTextSharp", "Информация",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return false;
+            try
+            {
+                // Создаем обычный текстовый файл как запасной вариант
+                File.WriteAllText(filePath, reportText);
+
+                try
+                {
+                    // Создаем новый PDF документ
+                    using (var document = new iTextSharp.text.Document())
+                    {
+                        // Создаем writer для записи в PDF
+                        var writer = iTextSharp.text.pdf.PdfWriter.GetInstance(
+                            document, new FileStream(filePath, FileMode.Create));
+
+                        document.Open();
+
+                        // Разбиваем текст отчета на строки
+                        string[] lines = reportText.Split(
+                            new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+
+                        // Извлекаем заголовок (первую строку)
+                        string title = lines.Length > 0 ? lines[0] : "Отчет";
+
+                        // Добавляем заголовок с форматированием
+                        var titleFont = iTextSharp.text.FontFactory.GetFont(
+                            iTextSharp.text.FontFactory.HELVETICA_BOLD, 16);
+                        document.Add(new iTextSharp.text.Paragraph(title, titleFont));
+                        document.Add(new iTextSharp.text.Paragraph(" ")); // интервал
+
+                        // Добавляем основной текст
+                        var contentFont = iTextSharp.text.FontFactory.GetFont(
+                            iTextSharp.text.FontFactory.HELVETICA, 12);
+                        for (int i = 1; i < lines.Length; i++)
+                        {
+                            document.Add(new iTextSharp.text.Paragraph(lines[i], contentFont));
+                        }
+
+                        document.Close();
+                        writer.Close();
+
+                        return true;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Если iTextSharp не установлен или произошла ошибка, 
+                    // продолжаем работу с текстовым файлом
+                    MessageBox.Show("PDF экспорт не доступен, отчет сохранен как текстовый файл.\n" +
+                                   "Для экспорта в PDF необходимо установить библиотеку iTextSharp:\n" +
+                                   "Install-Package iTextSharp -Version 5.5.13.3",
+                                   "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при экспорте отчета: {ex.Message}",
+                               "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
         }
 
         // Экспорт отчета в Excel
         public static bool ExportReportToExcel(string reportText, string filePath)
         {
-            // Примечание: для реализации этого метода нужна библиотека EPPlus
-            MessageBox.Show("Экспорт в Excel требует библиотеки EPPlus", "Информация",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return false;
+            try
+            {
+                // Создаем обычный текстовый файл как запасной вариант
+                File.WriteAllText(filePath, reportText);
+
+                try
+                {
+                    // Включаем LicenseContext.NonCommercial для EPPlus
+                    OfficeOpenXml.ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+
+                    // Создаем новый Excel пакет
+                    using (var package = new OfficeOpenXml.ExcelPackage())
+                    {
+                        // Добавляем новый лист
+                        var worksheet = package.Workbook.Worksheets.Add("Отчет");
+
+                        // Разбиваем текст отчета на строки
+                        string[] lines = reportText.Split(
+                            new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+
+                        // Извлекаем заголовок (первую строку)
+                        string title = lines.Length > 0 ? lines[0] : "Отчет";
+
+                        // Добавляем заголовок с форматированием
+                        worksheet.Cells[1, 1].Value = title;
+                        worksheet.Cells[1, 1].Style.Font.Bold = true;
+                        worksheet.Cells[1, 1].Style.Font.Size = 14;
+
+                        // Добавляем основной текст
+                        for (int i = 1; i < lines.Length; i++)
+                        {
+                            worksheet.Cells[i + 2, 1].Value = lines[i];
+                        }
+
+                        // Авторазмер столбцов
+                        worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+                        // Сохраняем в файл
+                        package.SaveAs(new FileInfo(filePath));
+
+                        return true;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Если EPPlus не установлен или произошла ошибка, 
+                    // продолжаем работу с текстовым файлом
+                    MessageBox.Show("Excel экспорт не доступен, отчет сохранен как текстовый файл.\n" +
+                                   "Для экспорта в Excel необходимо установить библиотеку EPPlus:\n" +
+                                   "Install-Package EPPlus -Version 4.5.3.3",
+                                   "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при экспорте отчета: {ex.Message}",
+                               "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
         }
         #endregion
     }
@@ -836,6 +976,29 @@ namespace FitnessClubManager
         public DateTime RegistrationDate { get; set; }
         public string Notes { get; set; }
         public string ActivityLevel { get; set; }
+
+        // Вычисляемые свойства
+        public string FullName
+        {
+            get
+            {
+                return $"{LastName} {FirstName} {(string.IsNullOrEmpty(MiddleName) ? "" : MiddleName)}".Trim();
+            }
+        }
+
+        public int Age
+        {
+            get
+            {
+                if (!BirthDate.HasValue) return 0;
+
+                int age = DateTime.Now.Year - BirthDate.Value.Year;
+                if (DateTime.Now.DayOfYear < BirthDate.Value.DayOfYear)
+                    age--;
+
+                return age;
+            }
+        }
     }
 
     public class Membership
@@ -850,6 +1013,21 @@ namespace FitnessClubManager
         public bool AutoRenew { get; set; }
         public int DurationDays { get; set; }
         public string TypeName { get; set; }
+
+        // Вычисляемые свойства
+        public bool IsExpired
+        {
+            get { return DateTime.Now > EndDate; }
+        }
+
+        public int DaysLeft
+        {
+            get
+            {
+                if (IsExpired) return 0;
+                return (EndDate - DateTime.Now).Days;
+            }
+        }
     }
 
     public class Trainer
@@ -864,6 +1042,15 @@ namespace FitnessClubManager
         public string Phone { get; set; }
         public string Email { get; set; }
         public double Rating { get; set; }
+
+        // Вычисляемые свойства
+        public string FullName
+        {
+            get
+            {
+                return $"{LastName} {FirstName} {(string.IsNullOrEmpty(MiddleName) ? "" : MiddleName)}".Trim();
+            }
+        }
     }
 
     public class ScheduleEntry
@@ -874,6 +1061,17 @@ namespace FitnessClubManager
         public DateTime ClassDate { get; set; }
         public TimeSpan StartTime { get; set; }
         public int MaxParticipants { get; set; }
+
+        // Вычисляемые свойства
+        public DateTime FullStartTime
+        {
+            get { return ClassDate.Add(StartTime); }
+        }
+
+        public bool IsInPast
+        {
+            get { return DateTime.Now > FullStartTime; }
+        }
     }
     #endregion
 }
