@@ -1,0 +1,330 @@
+-- Создание таблиц для фитнес-клуба "ActiveLife"
+
+-- Удаление таблиц, если они существуют (для чистой установки)
+DROP TABLE IF EXISTS Visits CASCADE;
+DROP TABLE IF EXISTS Schedule CASCADE;
+DROP TABLE IF EXISTS Classes CASCADE;
+DROP TABLE IF EXISTS ClassTypes CASCADE;
+DROP TABLE IF EXISTS Trainers CASCADE;
+DROP TABLE IF EXISTS Memberships CASCADE;
+DROP TABLE IF EXISTS MembershipTypes CASCADE;
+DROP TABLE IF EXISTS Clients CASCADE;
+DROP TABLE IF EXISTS Users CASCADE;
+DROP TABLE IF EXISTS Roles CASCADE;
+
+-- Таблица ролей пользователей
+CREATE TABLE Roles (
+    RoleID SERIAL PRIMARY KEY,
+    RoleName VARCHAR(50) NOT NULL
+);
+
+-- Таблица пользователей
+CREATE TABLE Users (
+    UserID SERIAL PRIMARY KEY,
+    Login VARCHAR(50) NOT NULL UNIQUE,
+    Password VARCHAR(100) NOT NULL,
+    RoleID INTEGER REFERENCES Roles(RoleID),
+    LastLogin TIMESTAMP
+);
+
+-- Таблица клиентов
+CREATE TABLE Clients (
+    ClientID SERIAL PRIMARY KEY,
+    UserID INTEGER REFERENCES Users(UserID),
+    LastName VARCHAR(50) NOT NULL,
+    FirstName VARCHAR(50) NOT NULL,
+    MiddleName VARCHAR(50),
+    BirthDate DATE,
+    Phone VARCHAR(20) NOT NULL,
+    Email VARCHAR(100),
+    RegistrationDate DATE NOT NULL DEFAULT CURRENT_DATE
+);
+
+-- Таблица типов абонементов
+CREATE TABLE MembershipTypes (
+    TypeID SERIAL PRIMARY KEY,
+    TypeName VARCHAR(100) NOT NULL,
+    Description TEXT,
+    DurationDays INTEGER NOT NULL,
+    Price DECIMAL(10, 2) NOT NULL
+);
+
+-- Таблица абонементов
+CREATE TABLE Memberships (
+    MembershipID SERIAL PRIMARY KEY,
+    ClientID INTEGER REFERENCES Clients(ClientID),
+    TypeID INTEGER REFERENCES MembershipTypes(TypeID),
+    StartDate DATE NOT NULL,
+    EndDate DATE NOT NULL,
+    IssueDate DATE NOT NULL DEFAULT CURRENT_DATE,
+    IsActive BOOLEAN DEFAULT TRUE
+);
+
+-- Таблица тренеров
+CREATE TABLE Trainers (
+    TrainerID SERIAL PRIMARY KEY,
+    UserID INTEGER REFERENCES Users(UserID),
+    LastName VARCHAR(50) NOT NULL,
+    FirstName VARCHAR(50) NOT NULL,
+    MiddleName VARCHAR(50),
+    Specialization VARCHAR(100),
+    Experience INTEGER,
+    Phone VARCHAR(20) NOT NULL,
+    Email VARCHAR(100)
+);
+
+-- Таблица типов занятий
+CREATE TABLE ClassTypes (
+    ClassTypeID SERIAL PRIMARY KEY,
+    TypeName VARCHAR(100) NOT NULL,
+    Description TEXT
+);
+
+-- Таблица занятий
+CREATE TABLE Classes (
+    ClassID SERIAL PRIMARY KEY,
+    ClassTypeID INTEGER REFERENCES ClassTypes(ClassTypeID),
+    ClassName VARCHAR(100) NOT NULL,
+    Description TEXT,
+    Duration INTEGER NOT NULL -- в минутах
+);
+
+-- Таблица расписания
+CREATE TABLE Schedule (
+    ScheduleID SERIAL PRIMARY KEY,
+    ClassID INTEGER REFERENCES Classes(ClassID),
+    TrainerID INTEGER REFERENCES Trainers(TrainerID),
+    ClassDate DATE NOT NULL,
+    StartTime TIME NOT NULL,
+    MaxParticipants INTEGER NOT NULL DEFAULT 20
+);
+
+-- Таблица посещений
+CREATE TABLE Visits (
+    VisitID SERIAL PRIMARY KEY,
+    ClientID INTEGER REFERENCES Clients(ClientID),
+    ScheduleID INTEGER REFERENCES Schedule(ScheduleID),
+    VisitDate TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Заполнение таблицы ролей
+INSERT INTO Roles (RoleName) VALUES 
+('Администратор'),
+('Тренер'),
+('Клиент');
+
+-- Создание демо-пользователя администратора (логин: admin, пароль: admin)
+INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+VALUES ('admin', 'admin', 1, CURRENT_TIMESTAMP);
+
+-- Создание пользователей-тренеров и привязка их к профилям тренеров
+WITH new_user1 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('trainer1', 'password', 2, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Trainers (UserID, LastName, FirstName, MiddleName, Specialization, Experience, Phone, Email)
+SELECT UserID, 'Иванов', 'Игорь', 'Петрович', 'Силовые тренировки', 5, '+7 (900) 123-45-67', 'ivanov@example.com'
+FROM new_user1;
+
+WITH new_user2 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('trainer2', 'password', 2, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Trainers (UserID, LastName, FirstName, MiddleName, Specialization, Experience, Phone, Email)
+SELECT UserID, 'Смирнова', 'Елена', 'Александровна', 'Йога', 3, '+7 (900) 222-33-44', 'smirnova@example.com'
+FROM new_user2;
+
+WITH new_user3 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('trainer3', 'password', 2, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Trainers (UserID, LastName, FirstName, MiddleName, Specialization, Experience, Phone, Email)
+SELECT UserID, 'Козлов', 'Дмитрий', 'Сергеевич', 'Кроссфит', 7, '+7 (900) 777-88-99', 'kozlov@example.com'
+FROM new_user3;
+
+-- Создание пользователей-клиентов и привязка их к профилям клиентов
+WITH new_user4 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('client1', 'password', 3, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Clients (UserID, LastName, FirstName, MiddleName, BirthDate, Phone, Email, RegistrationDate)
+SELECT UserID, 'Петров', 'Александр', 'Иванович', '1990-03-15', '+7 (905) 111-22-33', 'petrov@example.com', CURRENT_DATE - INTERVAL '60 days'
+FROM new_user4;
+
+WITH new_user5 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('client2', 'password', 3, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Clients (UserID, LastName, FirstName, MiddleName, BirthDate, Phone, Email, RegistrationDate)
+SELECT UserID, 'Сидорова', 'Наталья', 'Викторовна', '1985-07-22', '+7 (905) 222-33-44', 'sidorova@example.com', CURRENT_DATE - INTERVAL '45 days'
+FROM new_user5;
+
+WITH new_user6 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('client3', 'password', 3, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Clients (UserID, LastName, FirstName, MiddleName, BirthDate, Phone, Email, RegistrationDate)
+SELECT UserID, 'Кузнецов', 'Сергей', 'Алексеевич', '1993-11-10', '+7 (905) 333-44-55', 'kuznetsov@example.com', CURRENT_DATE - INTERVAL '30 days'
+FROM new_user6;
+
+WITH new_user7 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('client4', 'password', 3, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Clients (UserID, LastName, FirstName, MiddleName, BirthDate, Phone, Email, RegistrationDate)
+SELECT UserID, 'Морозова', 'Анна', 'Павловна', '1988-05-18', '+7 (905) 444-55-66', 'morozova@example.com', CURRENT_DATE - INTERVAL '20 days'
+FROM new_user7;
+
+WITH new_user8 AS (
+    INSERT INTO Users (Login, Password, RoleID, LastLogin) 
+    VALUES ('client5', 'password', 3, CURRENT_TIMESTAMP)
+    RETURNING UserID
+)
+INSERT INTO Clients (UserID, LastName, FirstName, MiddleName, BirthDate, Phone, Email, RegistrationDate)
+SELECT UserID, 'Волков', 'Артем', 'Дмитриевич', '1995-09-25', '+7 (905) 555-66-77', 'volkov@example.com', CURRENT_DATE - INTERVAL '10 days'
+FROM new_user8;
+
+-- Заполнение таблицы типов занятий
+INSERT INTO ClassTypes (TypeName, Description) VALUES
+('Групповое', 'Занятия в группе до 20 человек'),
+('Индивидуальное', 'Персональное занятие с тренером'),
+('Танцевальное', 'Танцевальные программы'),
+('Силовое', 'Силовые тренировки разной интенсивности'),
+('Аэробное', 'Кардио-нагрузки');
+
+-- Заполнение таблицы занятий
+INSERT INTO Classes (ClassTypeID, ClassName, Description, Duration) VALUES
+(1, 'Йога', 'Групповое занятие йогой для любого уровня подготовки', 60),
+(1, 'Пилатес', 'Система упражнений для развития гибкости и силы', 60),
+(4, 'Силовая тренировка', 'Интенсивная силовая тренировка для всех групп мышц', 60),
+(3, 'Зумба', 'Танцевальная фитнес-программа на основе латиноамериканских ритмов', 60),
+(5, 'Кардио', 'Аэробная нагрузка для тренировки сердечно-сосудистой системы', 45),
+(2, 'Персональная тренировка', 'Индивидуальная программа тренировок', 60),
+(4, 'Кроссфит', 'Система функциональных высокоинтенсивных тренировок', 60);
+
+-- Заполнение таблицы типов абонементов
+INSERT INTO MembershipTypes (TypeName, Description, DurationDays, Price) VALUES
+('Разовый', 'Разовое посещение любого группового занятия', 1, 500.00),
+('Месячный', 'Безлимитное посещение в течение 30 дней', 30, 4000.00),
+('Квартальный', 'Безлимитное посещение в течение 90 дней', 90, 10000.00),
+('Полугодовой', 'Безлимитное посещение в течение 180 дней', 180, 18000.00),
+('Годовой', 'Безлимитное посещение в течение года', 365, 30000.00);
+
+-- Заполнение остальных таблиц с использованием полученных ID
+DO $$
+DECLARE
+    trainer1_id INT;
+    trainer2_id INT;
+    trainer3_id INT;
+    client1_id INT;
+    client2_id INT;
+    client3_id INT;
+    client4_id INT;
+    client5_id INT;
+    schedule1_id INT;
+    schedule2_id INT;
+    schedule3_id INT;
+    schedule4_id INT;
+    schedule5_id INT;
+BEGIN
+    -- Получаем ID тренеров
+    SELECT TrainerID INTO trainer1_id FROM Trainers WHERE LastName = 'Иванов' LIMIT 1;
+    SELECT TrainerID INTO trainer2_id FROM Trainers WHERE LastName = 'Смирнова' LIMIT 1;
+    SELECT TrainerID INTO trainer3_id FROM Trainers WHERE LastName = 'Козлов' LIMIT 1;
+    
+    -- Получаем ID клиентов
+    SELECT ClientID INTO client1_id FROM Clients WHERE LastName = 'Петров' LIMIT 1;
+    SELECT ClientID INTO client2_id FROM Clients WHERE LastName = 'Сидорова' LIMIT 1;
+    SELECT ClientID INTO client3_id FROM Clients WHERE LastName = 'Кузнецов' LIMIT 1;
+    SELECT ClientID INTO client4_id FROM Clients WHERE LastName = 'Морозова' LIMIT 1;
+    SELECT ClientID INTO client5_id FROM Clients WHERE LastName = 'Волков' LIMIT 1;
+
+    -- Заполняем расписание
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (1, trainer1_id, CURRENT_DATE, '10:00:00', 15)
+    RETURNING ScheduleID INTO schedule1_id;
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (3, trainer1_id, CURRENT_DATE, '12:00:00', 12)
+    RETURNING ScheduleID INTO schedule2_id;
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (4, trainer2_id, CURRENT_DATE, '17:00:00', 20)
+    RETURNING ScheduleID INTO schedule3_id;
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (2, trainer2_id, CURRENT_DATE + INTERVAL '1 day', '10:00:00', 15)
+    RETURNING ScheduleID INTO schedule4_id;
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (5, trainer3_id, CURRENT_DATE + INTERVAL '1 day', '18:00:00', 20)
+    RETURNING ScheduleID INTO schedule5_id;
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (1, trainer2_id, CURRENT_DATE + INTERVAL '2 days', '10:00:00', 15);
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (7, trainer3_id, CURRENT_DATE + INTERVAL '2 days', '19:00:00', 10);
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (6, trainer1_id, CURRENT_DATE + INTERVAL '3 days', '15:00:00', 1);
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (4, trainer2_id, CURRENT_DATE + INTERVAL '4 days', '17:00:00', 20);
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (5, trainer3_id, CURRENT_DATE + INTERVAL '5 days', '10:00:00', 15);
+    
+    INSERT INTO Schedule (ClassID, TrainerID, ClassDate, StartTime, MaxParticipants)
+    VALUES (3, trainer1_id, CURRENT_DATE + INTERVAL '6 days', '12:00:00', 12);
+
+    -- Заполняем абонементы
+    INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive)
+    VALUES (client1_id, 3, CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE + INTERVAL '60 days', CURRENT_DATE - INTERVAL '30 days', true);
+    
+    INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive)
+    VALUES (client2_id, 2, CURRENT_DATE - INTERVAL '15 days', CURRENT_DATE + INTERVAL '15 days', CURRENT_DATE - INTERVAL '15 days', true);
+    
+    INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive)
+    VALUES (client3_id, 4, CURRENT_DATE - INTERVAL '10 days', CURRENT_DATE + INTERVAL '170 days', CURRENT_DATE - INTERVAL '10 days', true);
+    
+    INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive)
+    VALUES (client4_id, 1, CURRENT_DATE - INTERVAL '5 days', CURRENT_DATE - INTERVAL '4 days', CURRENT_DATE - INTERVAL '5 days', false);
+    
+    INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive)
+    VALUES (client5_id, 5, CURRENT_DATE - INTERVAL '2 days', CURRENT_DATE + INTERVAL '363 days', CURRENT_DATE - INTERVAL '2 days', true);
+    
+    INSERT INTO Memberships (ClientID, TypeID, StartDate, EndDate, IssueDate, IsActive)
+    VALUES (client1_id, 2, CURRENT_DATE - INTERVAL '100 days', CURRENT_DATE - INTERVAL '70 days', CURRENT_DATE - INTERVAL '100 days', false);
+
+    -- Заполняем посещения
+    INSERT INTO Visits (ClientID, ScheduleID, VisitDate)
+    VALUES (client1_id, schedule1_id, CURRENT_DATE);
+    
+    INSERT INTO Visits (ClientID, ScheduleID, VisitDate)
+    VALUES (client2_id, schedule1_id, CURRENT_DATE);
+    
+    INSERT INTO Visits (ClientID, ScheduleID, VisitDate)
+    VALUES (client3_id, schedule1_id, CURRENT_DATE);
+    
+    INSERT INTO Visits (ClientID, ScheduleID, VisitDate)
+    VALUES (client4_id, schedule3_id, CURRENT_DATE);
+    
+    INSERT INTO Visits (ClientID, ScheduleID, VisitDate)
+    VALUES (client5_id, schedule3_id, CURRENT_DATE);
+    
+    -- Добавляем дополнительные посещения
+    INSERT INTO Visits (ClientID, ScheduleID, VisitDate)
+    VALUES (client1_id, schedule4_id, CURRENT_DATE - INTERVAL '1 day');
+    
+    INSERT INTO Visits (ClientID, ScheduleID, VisitDate)
+    VALUES (client2_id, schedule5_id, CURRENT_DATE - INTERVAL '2 days');
+
+END $$;
