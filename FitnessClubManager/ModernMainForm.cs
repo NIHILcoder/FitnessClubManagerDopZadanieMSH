@@ -710,7 +710,7 @@ namespace FitnessClubManager
         #region Отчеты
         private void btnViewEnhancedReports_Click(object sender, EventArgs e)
         {
-            using (var form = new EnhancedReportForm())
+            using (var form = new SimpleReportForm())
             {
                 form.ShowDialog();
             }

@@ -5,18 +5,18 @@ using System.Drawing.Printing;
 
 namespace FitnessClubManager
 {
-    public partial class EnhancedReportForm : Form
+    public partial class SimpleReportForm : Form
     {
         private string reportContent = "";
         private string reportTitle = "";
         private int reportType = 0;
 
-        public EnhancedReportForm()
+        public SimpleReportForm()
         {
             InitializeComponent();
         }
 
-        private void EnhancedReportForm_Load(object sender, EventArgs e)
+        private void SimpleReportForm_Load(object sender, EventArgs e)
         {
             // Инициализация выпадающих списков
             comboReportType.Items.Add("Статистика по посещаемости");

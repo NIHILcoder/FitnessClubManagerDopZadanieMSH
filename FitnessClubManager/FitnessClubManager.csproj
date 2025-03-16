@@ -134,12 +134,6 @@
       <DependentUpon>ClientMembershipsForm.cs</DependentUpon>
     </Compile>
     <Compile Include="DatabaseManager.cs" />
-    <Compile Include="EnhancedReportForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="EnhancedReportForm.Designer.cs">
-      <DependentUpon>EnhancedReportForm.cs</DependentUpon>
-    </Compile>
     <Compile Include="ExtendMembershipForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -171,6 +165,12 @@
     </Compile>
     <Compile Include="ScheduleForm.Designer.cs">
       <DependentUpon>ScheduleForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="SimpleReportForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="SimpleReportForm.Designer.cs">
+      <DependentUpon>SimpleReportForm.cs</DependentUpon>
     </Compile>
     <Compile Include="TrainerClassesForm.cs">
       <SubType>Form</SubType>

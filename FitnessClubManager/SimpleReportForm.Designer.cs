@@ -1,6 +1,6 @@
 ﻿namespace FitnessClubManager
 {
-    partial class EnhancedReportForm
+    partial class SimpleReportForm
     {
         /// <summary>
         /// Required designer variable.
@@ -28,8 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(EnhancedReportForm));
-            this.panel5 = new System.Windows.Forms.Panel();
+            this.panelControls = new System.Windows.Forms.Panel();
             this.groupExportOptions = new System.Windows.Forms.GroupBox();
             this.lblExportInfo = new System.Windows.Forms.Label();
             this.btnPrint = new System.Windows.Forms.Button();
@@ -48,25 +47,25 @@
             this.label2 = new System.Windows.Forms.Label();
             this.btnClose = new System.Windows.Forms.Button();
             this.printDocument = new System.Drawing.Printing.PrintDocument();
-            this.panel5.SuspendLayout();
+            this.panelControls.SuspendLayout();
             this.groupExportOptions.SuspendLayout();
             this.groupReportSettings.SuspendLayout();
             this.SuspendLayout();
             // 
-            // panel5
+            // panelControls
             // 
-            this.panel5.Controls.Add(this.groupExportOptions);
-            this.panel5.Controls.Add(this.richTextReport);
-            this.panel5.Controls.Add(this.btnGenerateReport);
-            this.panel5.Controls.Add(this.groupReportSettings);
-            this.panel5.Controls.Add(this.comboReportType);
-            this.panel5.Controls.Add(this.label2);
-            this.panel5.Controls.Add(this.btnClose);
-            this.panel5.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panel5.Location = new System.Drawing.Point(0, 0);
-            this.panel5.Name = "panel5";
-            this.panel5.Size = new System.Drawing.Size(984, 561);
-            this.panel5.TabIndex = 0;
+            this.panelControls.Controls.Add(this.groupExportOptions);
+            this.panelControls.Controls.Add(this.richTextReport);
+            this.panelControls.Controls.Add(this.btnGenerateReport);
+            this.panelControls.Controls.Add(this.groupReportSettings);
+            this.panelControls.Controls.Add(this.comboReportType);
+            this.panelControls.Controls.Add(this.label2);
+            this.panelControls.Controls.Add(this.btnClose);
+            this.panelControls.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panelControls.Location = new System.Drawing.Point(0, 0);
+            this.panelControls.Name = "panelControls";
+            this.panelControls.Size = new System.Drawing.Size(984, 561);
+            this.panelControls.TabIndex = 0;
             // 
             // groupExportOptions
             // 
@@ -96,25 +95,21 @@
             // 
             // btnPrint
             // 
-            this.btnPrint.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.btnPrint.Location = new System.Drawing.Point(231, 46);
             this.btnPrint.Name = "btnPrint";
             this.btnPrint.Size = new System.Drawing.Size(100, 30);
             this.btnPrint.TabIndex = 3;
             this.btnPrint.Text = "Печать";
-            this.btnPrint.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.btnPrint.UseVisualStyleBackColor = true;
             this.btnPrint.Click += new System.EventHandler(this.btnPrint_Click);
             // 
             // btnExport
             // 
-            this.btnExport.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.btnExport.Location = new System.Drawing.Point(114, 46);
             this.btnExport.Name = "btnExport";
             this.btnExport.Size = new System.Drawing.Size(100, 30);
             this.btnExport.TabIndex = 2;
             this.btnExport.Text = "Экспорт";
-            this.btnExport.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.btnExport.UseVisualStyleBackColor = true;
             this.btnExport.Click += new System.EventHandler(this.btnExport_Click);
             // 
@@ -153,14 +148,11 @@
             // 
             // btnGenerateReport
             // 
-            this.btnGenerateReport.Image = ((System.Drawing.Image)(resources.GetObject("btnGenerateReport.Image")));
-            this.btnGenerateReport.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.btnGenerateReport.Location = new System.Drawing.Point(19, 143);
             this.btnGenerateReport.Name = "btnGenerateReport";
             this.btnGenerateReport.Size = new System.Drawing.Size(139, 40);
             this.btnGenerateReport.TabIndex = 3;
             this.btnGenerateReport.Text = "Сформировать";
-            this.btnGenerateReport.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.btnGenerateReport.UseVisualStyleBackColor = true;
             this.btnGenerateReport.Click += new System.EventHandler(this.btnGenerateReport_Click);
             // 
@@ -259,20 +251,20 @@
             // 
             this.printDocument.PrintPage += new System.Drawing.Printing.PrintPageEventHandler(this.printDocument_PrintPage);
             // 
-            // EnhancedReportForm
+            // SimpleReportForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btnClose;
             this.ClientSize = new System.Drawing.Size(984, 561);
-            this.Controls.Add(this.panel5);
+            this.Controls.Add(this.panelControls);
             this.MinimumSize = new System.Drawing.Size(1000, 600);
-            this.Name = "EnhancedReportForm";
+            this.Name = "SimpleReportForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Расширенные отчеты";
-            this.Load += new System.EventHandler(this.EnhancedReportForm_Load);
-            this.panel5.ResumeLayout(false);
-            this.panel5.PerformLayout();
+            this.Load += new System.EventHandler(this.SimpleReportForm_Load);
+            this.panelControls.ResumeLayout(false);
+            this.panelControls.PerformLayout();
             this.groupExportOptions.ResumeLayout(false);
             this.groupExportOptions.PerformLayout();
             this.groupReportSettings.ResumeLayout(false);
@@ -283,7 +275,7 @@
 
         #endregion
 
-        private System.Windows.Forms.Panel panel5;
+        private System.Windows.Forms.Panel panelControls;
         private System.Windows.Forms.RichTextBox richTextReport;
         private System.Windows.Forms.Button btnGenerateReport;
         private System.Windows.Forms.GroupBox groupReportSettings;
