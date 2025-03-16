@@ -24,9 +24,22 @@ namespace FitnessClubManager
 
         private void ClientForm_Load(object sender, EventArgs e)
         {
+            // Заполняем выпадающий список уровней активности
+            comboActivityLevel.Items.Add("Низкий");
+            comboActivityLevel.Items.Add("Средний");
+            comboActivityLevel.Items.Add("Высокий");
+            comboActivityLevel.Items.Add("Профессиональный");
+            comboActivityLevel.SelectedIndex = 1; // По умолчанию "Средний"
+
             if (isEditMode)
             {
                 LoadClientData();
+                // Добавим кнопку для просмотра истории клиента
+                btnViewHistory.Visible = true;
+            }
+            else
+            {
+                btnViewHistory.Visible = false;
             }
         }
 
@@ -54,6 +67,22 @@ namespace FitnessClubManager
 
                     txtPhone.Text = client.Phone;
                     txtEmail.Text = client.Email;
+
+                    // Заполняем новые поля
+                    rtbNotes.Text = client.Notes;
+
+                    // Устанавливаем уровень активности
+                    if (!string.IsNullOrEmpty(client.ActivityLevel))
+                    {
+                        for (int i = 0; i < comboActivityLevel.Items.Count; i++)
+                        {
+                            if (comboActivityLevel.Items[i].ToString() == client.ActivityLevel)
+                            {
+                                comboActivityLevel.SelectedIndex = i;
+                                break;
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -105,6 +134,7 @@ namespace FitnessClubManager
 
                 // Получаем данные из формы
                 DateTime? birthDate = dateTimeBirthDate.Checked ? dateTimeBirthDate.Value : (DateTime?)null;
+                string activityLevel = comboActivityLevel.SelectedItem.ToString();
 
                 if (isEditMode)
                 {
@@ -116,7 +146,9 @@ namespace FitnessClubManager
                         txtMiddleName.Text,
                         birthDate,
                         txtPhone.Text,
-                        txtEmail.Text
+                        txtEmail.Text,
+                        rtbNotes.Text,
+                        activityLevel
                     );
                 }
                 else
@@ -128,7 +160,9 @@ namespace FitnessClubManager
                         txtMiddleName.Text,
                         birthDate,
                         txtPhone.Text,
-                        txtEmail.Text
+                        txtEmail.Text,
+                        rtbNotes.Text,
+                        activityLevel
                     );
 
                     result = (newClientId > 0);
@@ -160,6 +194,26 @@ namespace FitnessClubManager
         {
             this.DialogResult = DialogResult.Cancel;
             this.Close();
+        }
+
+        private void btnViewHistory_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Получаем историю изменений клиента
+                var historyData = DatabaseManager.GetClientHistory(clientId);
+
+                // Открываем форму с историей
+                using (var form = new ClientHistoryForm(clientId, $"{txtLastName.Text} {txtFirstName.Text}", historyData))
+                {
+                    form.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при загрузке истории клиента: {ex.Message}",
+                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }

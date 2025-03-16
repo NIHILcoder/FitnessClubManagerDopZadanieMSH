@@ -38,6 +38,8 @@
             this.labelPrice = new System.Windows.Forms.Label();
             this.btnSave = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
+            this.chkAutoRenew = new System.Windows.Forms.CheckBox();
+            this.labelAutoRenewInfo = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // label1
@@ -115,7 +117,7 @@
             // 
             // btnSave
             // 
-            this.btnSave.Location = new System.Drawing.Point(154, 170);
+            this.btnSave.Location = new System.Drawing.Point(160, 220);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(109, 30);
             this.btnSave.TabIndex = 8;
@@ -126,7 +128,7 @@
             // btnCancel
             // 
             this.btnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.btnCancel.Location = new System.Drawing.Point(287, 170);
+            this.btnCancel.Location = new System.Drawing.Point(287, 220);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(109, 30);
             this.btnCancel.TabIndex = 9;
@@ -134,13 +136,35 @@
             this.btnCancel.UseVisualStyleBackColor = true;
             this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
             // 
+            // chkAutoRenew
+            // 
+            this.chkAutoRenew.AutoSize = true;
+            this.chkAutoRenew.Location = new System.Drawing.Point(110, 165);
+            this.chkAutoRenew.Name = "chkAutoRenew";
+            this.chkAutoRenew.Size = new System.Drawing.Size(205, 17);
+            this.chkAutoRenew.TabIndex = 10;
+            this.chkAutoRenew.Text = "Автоматически продлить по сроку";
+            this.chkAutoRenew.UseVisualStyleBackColor = true;
+            // 
+            // labelAutoRenewInfo
+            // 
+            this.labelAutoRenewInfo.AutoSize = true;
+            this.labelAutoRenewInfo.ForeColor = System.Drawing.SystemColors.GrayText;
+            this.labelAutoRenewInfo.Location = new System.Drawing.Point(110, 185);
+            this.labelAutoRenewInfo.Name = "labelAutoRenewInfo";
+            this.labelAutoRenewInfo.Size = new System.Drawing.Size(308, 13);
+            this.labelAutoRenewInfo.TabIndex = 11;
+            this.labelAutoRenewInfo.Text = "(Абонемент будет автоматически продлен при окончании)";
+            // 
             // MembershipForm
             // 
             this.AcceptButton = this.btnSave;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btnCancel;
-            this.ClientSize = new System.Drawing.Size(454, 221);
+            this.ClientSize = new System.Drawing.Size(454, 271);
+            this.Controls.Add(this.labelAutoRenewInfo);
+            this.Controls.Add(this.chkAutoRenew);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnSave);
             this.Controls.Add(this.labelPrice);
@@ -175,5 +199,7 @@
         private System.Windows.Forms.Label labelPrice;
         private System.Windows.Forms.Button btnSave;
         private System.Windows.Forms.Button btnCancel;
+        private System.Windows.Forms.CheckBox chkAutoRenew;
+        private System.Windows.Forms.Label labelAutoRenewInfo;
     }
 }

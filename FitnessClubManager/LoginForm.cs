@@ -39,10 +39,10 @@ namespace FitnessClubManager
                     // Успешная аутентификация
                     this.Hide();
 
-                    using (var mainForm = new MainForm(userInfo.Item1, userInfo.Item2))
+                    using (var ModernMainForm = new ModernMainForm(userInfo.Item1, userInfo.Item2))
                     {
                         // Если пользователь нажал кнопку "Выход", то показываем снова форму логина
-                        if (mainForm.ShowDialog() == DialogResult.Abort)
+                        if (ModernMainForm.ShowDialog() == DialogResult.Abort)
                         {
                             txtLogin.Clear();
                             txtPassword.Clear();

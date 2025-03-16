@@ -34,6 +34,9 @@ namespace FitnessClubManager
             {
                 LoadClients();
             }
+
+            // Устанавливаем значение по умолчанию для чекбокса автопродления
+            chkAutoRenew.Checked = false;
         }
 
         // Загрузка всех клиентов для выбора
@@ -199,8 +202,9 @@ namespace FitnessClubManager
                 int clientId = Convert.ToInt32(comboClient.SelectedValue);
                 int typeId = Convert.ToInt32(comboType.SelectedValue);
                 DateTime startDate = dateTimeStartDate.Value;
+                bool autoRenew = chkAutoRenew.Checked;
 
-                int membershipId = DatabaseManager.AddMembership(clientId, typeId, startDate);
+                int membershipId = DatabaseManager.AddMembership(clientId, typeId, startDate, autoRenew);
 
                 if (membershipId > 0)
                 {
